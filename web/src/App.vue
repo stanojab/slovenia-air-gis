@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import {
   fetchHealth,
   fetchMunicipalities,
@@ -7,7 +7,7 @@ import {
   fetchNearestStations,
   fetchStations,
 } from './api.js';
-import { formatTime, formatValue } from './airQuality.js';
+import { formatTime, formatValue, POLLUTANT_LABELS } from './airQuality.js';
 import MapView from './components/MapView.vue';
 import StationPanel from './components/StationPanel.vue';
 
@@ -15,6 +15,27 @@ const stations = ref(null);
 const municipalities = ref(null);
 const lastIngest = ref(null);
 const error = ref(null);
+
+// Pollutant that colours the map. Boundaries for each pollutant are fetched
+// once and cached, so switching back and forth is instant.
+const pollutant = ref('pm10');
+const municipalitiesByPollutant = new Map();
+
+async function loadMunicipalities(selected) {
+  if (!municipalitiesByPollutant.has(selected)) {
+    municipalitiesByPollutant.set(selected, await fetchMunicipalities(selected));
+  }
+  // Ignore a slow response if the user has picked another pollutant meanwhile.
+  if (selected === pollutant.value) {
+    municipalities.value = municipalitiesByPollutant.get(selected);
+  }
+}
+
+watch(pollutant, (selected) =>
+  loadMunicipalities(selected).catch((err) => {
+    error.value = `Could not load municipalities: ${err.message}`;
+  }),
+);
 
 // Result of the last map click: { point, municipality, nearest }
 const clickResult = ref(null);
@@ -26,13 +47,12 @@ const selectedStation = computed(
 
 onMounted(async () => {
   try {
-    const [stationData, municipalityData, health] = await Promise.all([
+    const [stationData, health] = await Promise.all([
       fetchStations(),
-      fetchMunicipalities(),
       fetchHealth(),
+      loadMunicipalities(pollutant.value),
     ]);
     stations.value = stationData;
-    municipalities.value = municipalityData;
     lastIngest.value = health.last_ingest;
   } catch (err) {
     error.value = `Could not load data: ${err.message}`;
@@ -78,10 +98,28 @@ async function onMapClick({ lat, lng }) {
         </template>
         Data until {{ formatTime(lastIngest.data_until) }} (ARSO, unverified)
       </p>
+      <div
+        class="pollutant-picker"
+        role="radiogroup"
+        aria-label="Pollutant shown on the map"
+      >
+        <span class="picker-label">Map shows</span>
+        <button
+          v-for="(label, key) in POLLUTANT_LABELS"
+          :key="key"
+          role="radio"
+          :aria-checked="pollutant === key"
+          :class="{ active: pollutant === key }"
+          @click="pollutant = key"
+        >
+          {{ label }}
+        </button>
+      </div>
     </header>
 
     <MapView
       class="map"
+      :pollutant="pollutant"
       :stations="stations"
       :municipalities="municipalities"
       :click-result="clickResult"
@@ -101,6 +139,7 @@ async function onMapClick({ lat, lng }) {
       <StationPanel
         v-if="selectedStation"
         :station="selectedStation"
+        :map-pollutant="pollutant"
         @close="selectedCode = null"
       />
 
@@ -126,12 +165,12 @@ async function onMapClick({ lat, lng }) {
                 {{ station.properties.name }}
               </button>
               <span class="muted">{{ station.properties.distance_km.toFixed(1) }} km</span>
-              <span class="pm10">
-                PM10
+              <span class="reading">
+                {{ POLLUTANT_LABELS[pollutant] }}
                 {{
                   formatValue(
-                    station.properties.readings.pm10?.value,
-                    station.properties.readings.pm10?.below_limit,
+                    station.properties.readings[pollutant]?.value,
+                    station.properties.readings[pollutant]?.below_limit,
                   )
                 }}
               </span>
@@ -143,8 +182,15 @@ async function onMapClick({ lat, lng }) {
       <section v-else>
         <h2>Air quality in Slovenia</h2>
         <p>
-          Municipalities are coloured by the latest hourly PM10 value of their
-          nearest monitoring station. Circles are ARSO monitoring stations.
+          Municipalities are coloured by the latest hourly value of the selected
+          pollutant at their nearest monitoring station that measures it.
+          Circles are ARSO monitoring stations; grey means no data.
+        </p>
+        <p class="muted">
+          PM10 and PM2.5 are fine dust (traffic, wood heating; worst in winter).
+          O₃ is ozone (worst on sunny summer days). NO₂ comes mostly from traffic.
+          O₃ and NO₂ are measured at only 11 stations, so values are often borrowed
+          from further away.
         </p>
         <p>
           <strong>Click anywhere</strong> on the map to see the municipality and the
@@ -230,12 +276,38 @@ async function onMapClick({ lat, lng }) {
 }
 
 .nearest .muted,
-.nearest .pm10 {
+.nearest .reading {
   margin-left: 0.5rem;
 }
 
-.pm10 {
+.reading {
   font-size: 0.85rem;
+}
+
+.pollutant-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: auto;
+}
+
+.picker-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.pollutant-picker button {
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.pollutant-picker button.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
 }
 
 .link {

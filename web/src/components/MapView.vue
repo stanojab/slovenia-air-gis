@@ -1,9 +1,16 @@
 <script setup>
 import L from 'leaflet';
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { formatValue, PM10_BANDS, NO_DATA_COLOR, pm10Color } from '../airQuality.js';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import {
+  bandsFor,
+  colorFor,
+  formatValue,
+  NO_DATA_COLOR,
+  POLLUTANT_LABELS,
+} from '../airQuality.js';
 
 const props = defineProps({
+  pollutant: { type: String, required: true }, // 'pm10', 'pm2.5', 'o3' or 'no2'
   stations: { type: Object, default: null }, // GeoJSON FeatureCollection
   municipalities: { type: Object, default: null }, // GeoJSON FeatureCollection
   clickResult: { type: Object, default: null },
@@ -12,6 +19,8 @@ const props = defineProps({
 const emit = defineEmits(['map-click', 'station-click']);
 
 const container = ref(null);
+const legendBands = computed(() => bandsFor(props.pollutant));
+const pollutantLabel = computed(() => POLLUTANT_LABELS[props.pollutant]);
 
 // Leaflet objects are kept outside Vue's reactivity on purpose: Leaflet
 // manages its own state, and wrapping it in reactive proxies breaks it.
@@ -51,9 +60,13 @@ function drawMunicipalities() {
   municipalityLayer?.remove();
   if (!map || !props.municipalities) return;
 
+  // The collection says which pollutant its values are for.
+  const pollutant = props.municipalities.features[0]?.properties.pollutant ?? props.pollutant;
+  const label = POLLUTANT_LABELS[pollutant];
+
   municipalityLayer = L.geoJSON(props.municipalities, {
     style: (feature) => ({
-      fillColor: pm10Color(feature.properties.pm10),
+      fillColor: colorFor(pollutant, feature.properties.value),
       fillOpacity: 0.55,
       color: '#ffffff',
       weight: 0.8,
@@ -61,9 +74,9 @@ function drawMunicipalities() {
     onEachFeature: (feature, layer) => {
       const p = feature.properties;
       const value =
-        p.pm10 === null
-          ? 'no current PM10 data'
-          : `PM10 ${formatValue(p.pm10, p.pm10_below_limit)} µg/m³ at ${p.station_name}
+        p.value === null
+          ? `no current ${label} data`
+          : `${label} ${formatValue(p.value, p.below_limit)} µg/m³ at ${p.station_name}
              (${p.distance_km.toFixed(1)} km)`;
       layer.bindTooltip(`<strong>${p.name}</strong><br>${value}`, { sticky: true });
     },
@@ -80,7 +93,7 @@ function drawStations() {
       const selected = feature.properties.code === props.selectedCode;
       return L.circleMarker(latlng, {
         radius: selected ? 10 : 7,
-        fillColor: pm10Color(feature.properties.readings.pm10?.value),
+        fillColor: colorFor(props.pollutant, feature.properties.readings[props.pollutant]?.value),
         fillOpacity: 1,
         color: selected ? '#2563eb' : '#1f2933',
         weight: selected ? 3 : 1.5,
@@ -138,7 +151,7 @@ function drawClickResult() {
 }
 
 watch(() => props.municipalities, drawMunicipalities);
-watch(() => [props.stations, props.selectedCode], drawStations);
+watch(() => [props.stations, props.selectedCode, props.pollutant], drawStations);
 watch(() => props.clickResult, drawClickResult);
 </script>
 
@@ -149,10 +162,10 @@ watch(() => props.clickResult, drawClickResult);
       class="map-container"
     />
     <div class="legend">
-      <strong>PM10 µg/m³</strong>
+      <strong>{{ pollutantLabel }} µg/m³</strong>
       <span class="muted">(EEA index, hourly)</span>
       <div
-        v-for="(band, i) in PM10_BANDS"
+        v-for="band in legendBands"
         :key="band.label"
         class="legend-row"
       >
@@ -162,7 +175,7 @@ watch(() => props.clickResult, drawClickResult);
         />
         {{ band.label }}
         <span class="muted">
-          {{ i === 0 ? 0 : PM10_BANDS[i - 1].max + 1 }}{{ band.max === Infinity ? '+' : `–${band.max}` }}
+          {{ band.min }}{{ band.max === Infinity ? '+' : `–${band.max}` }}
         </span>
       </div>
       <div class="legend-row">

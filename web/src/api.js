@@ -16,7 +16,7 @@ async function getJson(path, params = {}) {
 
 export const fetchHealth = () => getJson('/api/health');
 export const fetchStations = () => getJson('/api/stations');
-export const fetchMunicipalities = () => getJson('/api/municipalities');
+export const fetchMunicipalities = (pollutant) => getJson('/api/municipalities', { pollutant });
 
 export const fetchNearestStations = (lat, lng, limit = 3) =>
   getJson('/api/stations/nearest', { lat, lng, limit });

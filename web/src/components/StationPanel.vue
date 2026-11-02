@@ -1,17 +1,26 @@
 <script setup>
 import { ref, watch } from 'vue';
 import { fetchHistory } from '../api.js';
-import { formatTime, formatValue, POLLUTANT_LABELS, pm10Band } from '../airQuality.js';
+import { bandFor, formatTime, formatValue, POLLUTANT_LABELS } from '../airQuality.js';
 import HistoryChart from './HistoryChart.vue';
 
 const props = defineProps({
   station: { type: Object, required: true }, // GeoJSON Feature from /api/stations
+  mapPollutant: { type: String, default: 'pm10' }, // pollutant selected for the map
 });
 defineEmits(['close']);
 
 const history = ref(null);
-const pollutant = ref('pm10');
+const pollutant = ref(props.mapPollutant); // pollutant shown in the chart
 const error = ref(null);
+
+// Switching the map's pollutant also switches the chart, if the station measures it.
+watch(
+  () => props.mapPollutant,
+  (selected) => {
+    if (!history.value || history.value[selected]?.length) pollutant.value = selected;
+  },
+);
 
 // Load the history whenever a different station is selected.
 watch(
@@ -70,10 +79,10 @@ watch(
             )
           }}
           <span
-            v-if="key === 'pm10' && pm10Band(station.properties.readings.pm10?.value)"
+            v-if="bandFor(key, station.properties.readings[key]?.value)"
             class="muted"
           >
-            {{ pm10Band(station.properties.readings.pm10.value).label }}
+            {{ bandFor(key, station.properties.readings[key].value).label }}
           </span>
         </td>
         <td class="muted">
