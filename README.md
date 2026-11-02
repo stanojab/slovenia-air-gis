@@ -10,8 +10,7 @@ with SQL and returns GeoJSON, and a Vue + Leaflet frontend draws the results.
 This is a web rebuild of an older desktop project of mine, a Java/LibGDX weather and
 air-quality map of Slovenia.
 
-<!-- TODO: add screenshot or GIF -->
-![Screenshot](docs/screenshot.png)
+![Screenshot: municipalities coloured by PM10, a map click with lines to the nearest stations, and a station panel with its 7-day history](docs/screenshot.jpg)
 
 **What you can do**
 
@@ -223,8 +222,7 @@ While the stack is running, the PostGIS database is published on `localhost:5432
 
 The full-resolution boundaries are in the database. Only the API simplifies them.
 
-<!-- TODO: add QGIS screenshot -->
-![QGIS](docs/qgis.png)
+![The PostGIS layers rendered in QGIS 3.44: full-resolution municipality boundaries and stations styled by latest PM10](docs/qgis.jpg)
 
 ## Possible improvements
 
