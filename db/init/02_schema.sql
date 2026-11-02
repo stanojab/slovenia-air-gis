@@ -26,6 +26,9 @@ CREATE TABLE measurements (
     pollutant     text NOT NULL,                -- 'pm10', 'pm2.5', 'o3', 'no2', ...
     measured_at   timestamptz NOT NULL,         -- end of the averaging hour
     value         double precision NOT NULL,    -- µg/m³ (CO in mg/m³)
+    -- ARSO reports some values as "<2" (below the detection limit).
+    -- We store the limit itself as value and set this flag, instead of guessing.
+    below_limit   boolean NOT NULL DEFAULT false,
     PRIMARY KEY (station_code, pollutant, measured_at)
 );
 

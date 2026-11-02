@@ -18,5 +18,19 @@ services:
       timeout: 5s
       retries: 20
 
+  # Loads ARSO measurements + GURS boundaries, then exits.
+  # Refresh later with: docker compose run --rm ingest
+  ingest:
+    build: ./ingest
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-airgis}:${POSTGRES_PASSWORD:-airgis}@db:5432/${POSTGRES_DB:-airgis}
+      INGEST_OFFLINE: ${INGEST_OFFLINE:-0}
+    volumes:
+      - ./data/sample:/data/sample:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
 volumes:
   db-data:
