@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  ingest:
+    name: Python ingestion (ruff + pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ingest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: pytest
+
+  api:
+    name: API (eslint + tests against PostGIS)
+    runs-on: ubuntu-latest
+    services:
+      postgis:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_DB: airgis_test
+          POSTGRES_USER: airgis
+          POSTGRES_PASSWORD: airgis
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U airgis -d airgis_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://airgis:airgis@localhost:5432/airgis_test
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Create schema from the migration files
+        run: |
+          for f in db/init/*.sql; do
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Load the committed sample snapshot
+        working-directory: ingest
+        env:
+          SAMPLE_DIR: ../data/sample
+        run: |
+          pip install -r requirements.txt
+          python -m ingest.main --offline
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - working-directory: api
+        run: |
+          npm ci
+          npm run lint
+          npm test
+
+  web:
+    name: Frontend (eslint + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
