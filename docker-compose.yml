@@ -53,6 +53,15 @@ services:
       timeout: 5s
       retries: 5
 
+  # Built Vue app served by nginx, which also proxies /api to the api service.
+  web:
+    build: ./web
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
   # ---- Test stack: docker compose --profile test run --rm api-test ----
   # A separate, throwaway database (in memory, tmpfs) seeded from the
   # committed sample snapshot, so test results are deterministic.
