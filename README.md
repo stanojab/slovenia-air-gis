@@ -1,6 +1,6 @@
 # Slovenia Air Quality GIS
 
-![CI](https://github.com/OWNER/slovenia-air-gis/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/stanojab/slovenia-air-gis/actions/workflows/ci.yml/badge.svg)
 
 A web GIS application that shows Slovenia's air-quality monitoring stations and its
 212 municipalities on an interactive map. It loads hourly measurements from ARSO, the
