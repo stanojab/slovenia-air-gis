@@ -1,11 +1,16 @@
 import { Router } from 'express';
 import { query } from '../db.js';
 import { toFeature, toFeatureCollection } from '../geojson.js';
-import { HttpError, optionalInteger, parsePoint, requireNumber } from '../validate.js';
+import {
+  HttpError,
+  optionalInteger,
+  optionalPollutant,
+  parsePoint,
+  POLLUTANTS,
+  requireNumber,
+} from '../validate.js';
 
 export const stationsRouter = Router();
-
-const POLLUTANTS = ['pm10', 'pm2.5', 'o3', 'no2'];
 
 // The point the user asked about, built from parameters $1 (lng) and $2 (lat).
 // ST_MakePoint takes x then y, i.e. longitude first.
@@ -80,10 +85,8 @@ stationsRouter.get('/within', async (req, res) => {
 // Returns one GeoJSON Feature (the station) with the series in its properties.
 stationsRouter.get('/:code/history', async (req, res) => {
   const hours = optionalInteger(req.query, 'hours', { min: 1, max: 720, fallback: 168 });
-  const pollutants = req.query.pollutant ? [req.query.pollutant] : POLLUTANTS;
-  if (!pollutants.every((p) => POLLUTANTS.includes(p))) {
-    throw new HttpError(400, `Parameter 'pollutant' must be one of: ${POLLUTANTS.join(', ')}`);
-  }
+  const pollutant = optionalPollutant(req.query, null);
+  const pollutants = pollutant ? [pollutant] : POLLUTANTS;
 
   const [station] = await query(
     `SELECT code, name, altitude_m, ST_AsGeoJSON(geom)::json AS geometry

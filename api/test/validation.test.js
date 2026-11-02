@@ -19,6 +19,7 @@ describe('query parameter validation', () => {
     ['/api/stations/within?lat=46&lng=14.5&radius_km=1000', "Parameter 'radius_km' must be between"],
     ['/api/municipalities/at?lat=46', "Missing required parameter 'lng'"],
     ['/api/stations/E403/history?pollutant=xyz', "Parameter 'pollutant' must be one of"],
+    ['/api/municipalities?pollutant=so2', "Parameter 'pollutant' must be one of"],
     ['/api/stations/E403/history?hours=0', "Parameter 'hours' must be between 1 and 720"],
   ])('%s -> 400', async (url, message) => {
     const res = await api.get(url).expect(400);

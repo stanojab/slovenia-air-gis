@@ -38,6 +38,18 @@ function checkNumber(raw, name, { min, max }) {
   return value;
 }
 
+// The pollutants the app shows (ARSO also reports SO2, CO, benzene, NOx).
+export const POLLUTANTS = ['pm10', 'pm2.5', 'o3', 'no2'];
+
+export function optionalPollutant(query, fallback) {
+  const raw = query.pollutant;
+  if (raw === undefined || raw === '') return fallback;
+  if (!POLLUTANTS.includes(raw)) {
+    throw new HttpError(400, `Parameter 'pollutant' must be one of: ${POLLUTANTS.join(', ')}`);
+  }
+  return raw;
+}
+
 export function parsePoint(query) {
   return {
     lat: requireNumber(query, 'lat', { min: -90, max: 90 }),

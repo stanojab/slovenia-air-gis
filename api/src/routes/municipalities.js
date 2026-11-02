@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { query } from '../db.js';
 import { toFeatureCollection } from '../geojson.js';
-import { parsePoint } from '../validate.js';
+import { optionalPollutant, parsePoint } from '../validate.js';
 
 export const municipalitiesRouter = Router();
 
@@ -15,24 +15,29 @@ const SIMPLIFY_TOLERANCE = 0.001;
 // days ago from colouring the map with an old value.
 const MAX_READING_AGE_HOURS = 6;
 
-// GET /api/municipalities - simplified boundaries + PM10 from the nearest station.
+// GET /api/municipalities?pollutant=pm10 - simplified boundaries + the value
+// of one pollutant (pm10, pm2.5, o3 or no2) from the nearest station.
 //
 // Only ~20 of 212 municipalities contain a station, so averaging stations
 // *inside* each municipality would leave most of the map empty. Instead, for
-// every municipality we find the nearest station with a current PM10 value.
-// CROSS JOIN LATERAL runs the inner KNN query once per municipality.
+// every municipality we find the nearest station with a current value of the
+// requested pollutant (O3 and NO2 are measured at fewer stations, so their
+// nearest station is often further away - the response includes the distance).
+// LEFT JOIN LATERAL runs the inner KNN query once per municipality.
 // ST_PointOnSurface gives a point guaranteed to lie inside the polygon
 // (a centroid can fall outside a C-shaped municipality).
 municipalitiesRouter.get('/', async (req, res) => {
+  const pollutant = optionalPollutant(req.query, 'pm10');
   const rows = await query(
     `
     SELECT m.id, m.name, m.area_km2,
+           $3::text AS pollutant,
            nearest.code AS station_code,
            nearest.name AS station_name,
            nearest.distance_km,
-           nearest.value AS pm10,
-           nearest.below_limit AS pm10_below_limit,
-           nearest.measured_at AS pm10_measured_at,
+           nearest.value,
+           nearest.below_limit,
+           nearest.measured_at,
            ST_AsGeoJSON(ST_Multi(ST_SimplifyPreserveTopology(m.geom, $1)), 5)::json AS geometry
     FROM municipalities m
     LEFT JOIN LATERAL (
@@ -40,7 +45,7 @@ municipalitiesRouter.get('/', async (req, res) => {
                ST_Distance(s.geom::geography, ST_PointOnSurface(m.geom)::geography) / 1000
                    AS distance_km
         FROM stations s
-        JOIN latest_readings r ON r.station_code = s.code AND r.pollutant = 'pm10'
+        JOIN latest_readings r ON r.station_code = s.code AND r.pollutant = $3
         WHERE r.measured_at >= (SELECT max(measured_at) FROM measurements)
                                - make_interval(hours => $2)
         ORDER BY s.geom::geography <-> ST_PointOnSurface(m.geom)::geography
@@ -48,7 +53,7 @@ municipalitiesRouter.get('/', async (req, res) => {
     ) nearest ON true
     ORDER BY m.name
     `,
-    [SIMPLIFY_TOLERANCE, MAX_READING_AGE_HOURS],
+    [SIMPLIFY_TOLERANCE, MAX_READING_AGE_HOURS, pollutant],
   );
   res.json(toFeatureCollection(rows));
 });

@@ -35,16 +35,37 @@ describe('GET /api/municipalities', () => {
     expect(JSON.stringify(res.body).length).toBeLessThan(1_000_000);
   });
 
-  it('attaches the PM10 value of the nearest station to each municipality', async () => {
+  it('attaches the PM10 value of the nearest station by default', async () => {
     const res = await api.get('/api/municipalities').expect(200);
     const byName = Object.fromEntries(res.body.features.map((f) => [f.properties.name, f]));
 
     for (const feature of res.body.features) {
-      expect(typeof feature.properties.pm10).toBe('number');
+      expect(feature.properties.pollutant).toBe('pm10');
+      expect(typeof feature.properties.value).toBe('number');
       expect(feature.properties.distance_km).toBeGreaterThanOrEqual(0);
     }
     expect(byName.Ljubljana.properties.station_code).toMatch(/^E40[345]$/);
     expect(byName.Piran.properties.station_name).toBe('Koper');
     expect(byName.Maribor.properties.station_name).toMatch(/^MB /);
   });
+
+  it.each(['pm10', 'pm2.5', 'o3', 'no2'])(
+    'with pollutant=%s, every value comes from a station that measures it',
+    async (pollutant) => {
+      const [municipalities, stations] = await Promise.all([
+        api.get('/api/municipalities').query({ pollutant }).expect(200),
+        api.get('/api/stations').expect(200),
+      ]);
+      const latestByStation = Object.fromEntries(
+        stations.body.features.map((f) => [f.properties.code, f.properties.readings[pollutant]]),
+      );
+
+      for (const { properties } of municipalities.body.features) {
+        expect(properties.pollutant).toBe(pollutant);
+        const latest = latestByStation[properties.station_code];
+        expect(latest).toBeDefined();
+        expect(properties.value).toBe(latest.value);
+      }
+    },
+  );
 });
