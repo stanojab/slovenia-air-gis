@@ -211,3 +211,8 @@ this on every push ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
 - Connect QGIS to the PostGIS database (port 5432) to explore and style the station and
   municipality layers in a desktop GIS.
+
+## License
+
+The code is released under the [MIT License](LICENSE). The data keeps its own licenses
+(see [Data sources and licenses](#data-sources-and-licenses)).
