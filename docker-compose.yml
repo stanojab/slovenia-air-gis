@@ -32,5 +32,69 @@ services:
         condition: service_healthy
     restart: "no"
 
+  api:
+    build:
+      context: ./api
+      target: production
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-airgis}:${POSTGRES_PASSWORD:-airgis}@db:5432/${POSTGRES_DB:-airgis}
+      PORT: 3000
+    ports:
+      - "${API_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      # Start only after the data is loaded, so the first request has data.
+      ingest:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---- Test stack: docker compose --profile test run --rm api-test ----
+  # A separate, throwaway database (in memory, tmpfs) seeded from the
+  # committed sample snapshot, so test results are deterministic.
+  db-test:
+    profiles: [test]
+    image: postgis/postgis:17-3.5
+    environment:
+      POSTGRES_DB: airgis_test
+      POSTGRES_USER: airgis
+      POSTGRES_PASSWORD: airgis
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airgis -d airgis_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  ingest-test:
+    profiles: [test]
+    build: ./ingest
+    environment:
+      DATABASE_URL: postgresql://airgis:airgis@db-test:5432/airgis_test
+      INGEST_OFFLINE: "1"
+    volumes:
+      - ./data/sample:/data/sample:ro
+    depends_on:
+      db-test:
+        condition: service_healthy
+
+  api-test:
+    profiles: [test]
+    build:
+      context: ./api
+      target: test
+    environment:
+      DATABASE_URL: postgresql://airgis:airgis@db-test:5432/airgis_test
+    depends_on:
+      ingest-test:
+        condition: service_completed_successfully
+
 volumes:
   db-data:
