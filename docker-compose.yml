@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    environment:
+      # Defaults make a plain `docker compose up` work; override them in .env.
+      POSTGRES_DB: ${POSTGRES_DB:-airgis}
+      POSTGRES_USER: ${POSTGRES_USER:-airgis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-airgis}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # SQL files here run once, on first start with an empty volume.
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  db-data:
