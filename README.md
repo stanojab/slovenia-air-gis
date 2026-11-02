@@ -46,7 +46,6 @@ flowchart LR
     api -- spatial SQL --> db
     web -- /api/* proxy --> api
     browser([Browser]) -- :8080 --> web
-    qgis([QGIS]) -. :5432 .-> db
 ```
 
 Startup order is enforced with healthchecks: `db` becomes healthy, then `ingest` loads
@@ -208,46 +207,7 @@ pytest
 Lint: `ruff check .` (ingest) and `npm run lint` (api, web). GitHub Actions runs all of
 this on every push ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)).
 
-## Viewing the data in QGIS
-
-While the stack is running, the PostGIS database is published on `localhost:5432`.
-
-1. In QGIS, open **Layer → Data Source Manager → PostgreSQL** and click **New**.
-2. Fill in: Name `airgis`, Host `localhost`, Port `5432`, Database `airgis`, then under
-   Authentication → Basic: user `airgis`, password `airgis` (or your `.env` values).
-   Click **Test Connection**.
-3. Click **Connect** and add `municipalities` (MultiPolygon) and `stations` (Point). QGIS
-   reads the geometry type and the CRS (EPSG:4326) from PostGIS automatically.
-4. To style stations by their latest PM10 value, open **Database → DB Manager → SQL
-   Window**, run the query below, tick **Load as new layer** with `code` as the unique
-   column and `geom` as the geometry column, and use a **Graduated** symbology on `pm10`:
-
-   ```sql
-   SELECT s.code, s.name, s.geom, r.value AS pm10, r.measured_at
-   FROM stations s
-   JOIN latest_readings r ON r.station_code = s.code AND r.pollutant = 'pm10';
-   ```
-
-The full-resolution boundaries are in the database. Only the API simplifies them.
-
-![The PostGIS layers rendered in QGIS 3.44: full-resolution municipality boundaries and stations styled by latest PM10](docs/qgis.jpg)
-
 ## Possible improvements
 
-- **Scheduled ingestion:** run `ingest` hourly (a cron container or a scheduled job)
-  instead of on startup only.
-- **Cache simplified boundaries:** store them in a materialized view refreshed by the
-  ingest, instead of simplifying 212 polygons on every request (~0.7 s).
-- **Gap-free simplification:** each polygon is simplified on its own, so shared borders
-  can open tiny slivers at high zoom. `ST_CoverageSimplify` (PostGIS 3.6 with GEOS 3.12+)
-  simplifies the whole coverage consistently.
-- **Vector tiles:** serve `ST_AsMVT` tiles and switch to MapLibre GL if the data grows,
-  for example to the national 6,000 settlements or a long history.
-- **Interpolated surface:** an IDW or kriging surface instead of the nearest-station
-  approximation, with its uncertainty shown honestly.
-- **Overall AQI:** add an "overall" option that uses the worst sub-index across all
-  pollutants at each station, as the EEA does.
-- **DST edge case:** during the autumn clock change, ARSO's local timestamps for the
-  repeated hour are ambiguous. Handling this needs the hour from `datum_od` or UTC
-  times from the source.
-- End-to-end browser tests (Playwright) in CI.
+- Connect QGIS to the PostGIS database (port 5432) to explore and style the station and
+  municipality layers in a desktop GIS.

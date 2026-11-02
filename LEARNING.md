@@ -125,7 +125,7 @@ nginx gzip.
   and a test caught this. `ST_Multi` keeps the GeoJSON type consistent.
 - **Trade-off:** each municipality is simplified on its own, so neighbours can end up
   with slightly different borders (tiny gaps or overlaps when zoomed in). Coverage-aware
-  simplification is listed under improvements.
+  simplification (`ST_CoverageSimplify`, PostGIS 3.6+) would avoid that.
 - **The full precision stays in the database.** "Which municipality am I in"
   (`ST_Contains`) runs on the original boundaries, so it is exact.
 
@@ -148,7 +148,7 @@ nginx gzip.
   connects to `postgresql://…@db:5432/…`, and nginx forwards to `http://api:3000`. Inside
   the network, `localhost` would mean "this container", not the host.
 - **Ports.** `ports: "8080:80"` publishes a container port on your machine. Only `web`
-  (8080), `api` (3000, for curl and debugging) and `db` (5432, for QGIS) are published.
+  (8080), `api` (3000, for curl and debugging) and `db` (5432, for psql or other database tools) are published.
   Containers talk to each other directly on internal ports.
 - **Startup order with healthchecks.** `depends_on` alone only waits for a container to
   *start*, not to be *ready*. So:
