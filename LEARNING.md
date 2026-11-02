@@ -202,6 +202,21 @@ nginx gzip.
   tooltip names the station and the distance the value comes from. Stale readings (more
   than 6 h older than the newest data) are ignored, so a broken station can't colour the
   map with old values.
+- **Which pollutant colours the map.** The user picks one. No single pollutant is "the"
+  air quality:
+  - PM10 has the best coverage (22 of 24 stations) and is Slovenia's classic winter
+    problem.
+  - PM2.5 is the most harmful to health. The EEA attributes most air-pollution deaths
+    in Europe to it.
+  - O₃ is the summer pollutant.
+  - NO₂ tracks traffic.
+
+  Each has its own EEA band limits (for example "Good" PM2.5 ends at 5 µg/m³, but
+  "Good" O₃ ends at 60), so the legend changes with the selection. The API takes
+  `?pollutant=` and validates it against a fixed list. The value is still passed as a
+  `$3` parameter, never pasted into the SQL. O₃ and NO₂ are measured at only 11
+  stations, so their nearest-station distances are larger, which is one more reason the
+  tooltip shows the distance.
 - **Leaflet instead of MapLibre GL.** The data is small (212 polygons, 24 points) and
   raster OSM tiles need no API key or style JSON. Leaflet's API is the simplest way to
   draw GeoJSON. MapLibre's WebGL vector rendering would be worth it for vector tiles or

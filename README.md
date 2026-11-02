@@ -10,12 +10,13 @@ with SQL and returns GeoJSON, and a Vue + Leaflet frontend draws the results.
 This is a web rebuild of an older desktop project of mine, a Java/LibGDX weather and
 air-quality map of Slovenia.
 
-![Screenshot: municipalities coloured by PM10, a map click with lines to the nearest stations, and a station panel with its 7-day history](docs/screenshot.jpg)
+![Screenshot: municipalities coloured by the selected pollutant, a map click with lines to the nearest stations, and a station panel with its 7-day history](docs/screenshot.jpg)
 
 **What you can do**
 
-- See every municipality coloured by the latest hourly PM10 value of its nearest station
-  (European Air Quality Index bands).
+- Pick a pollutant (PM10, PM2.5, O₃ or NO₂) and see every municipality coloured by
+  its latest hourly value at the nearest station that measures it (European Air Quality
+  Index bands).
 - Click anywhere to see which municipality you clicked and the 3 nearest stations, with
   distances and lines drawn to them.
 - Click a station to see its latest PM10, PM2.5, O₃ and NO₂ values and a 7-day chart.
@@ -90,7 +91,7 @@ All spatial endpoints return GeoJSON. Invalid parameters return `400` with
 | `GET /api/stations/nearest?lat=&lng=&limit=3` | Nearest stations to a point, with `distance_km` (limit 1–50) |
 | `GET /api/stations/within?lat=&lng=&radius_km=` | Stations within a radius (0.001–500 km) |
 | `GET /api/stations/:code/history?pollutant=&hours=168` | Hourly time series (a Feature with `series` in its properties) |
-| `GET /api/municipalities` | Simplified boundaries + PM10 of the nearest station with a current value |
+| `GET /api/municipalities?pollutant=pm10` | Simplified boundaries + the value of `pollutant` (`pm10`, `pm2.5`, `o3`, `no2`) at the nearest station with a current reading |
 | `GET /api/municipalities/at?lat=&lng=` | The municipality that contains the point (empty if outside Slovenia) |
 | `GET /api/health` | Status and info about the last ingestion run |
 
@@ -132,7 +133,7 @@ The GIST index finds the few polygons whose bounding box contains the point, and
 ST_AsGeoJSON(ST_Multi(ST_SimplifyPreserveTopology(m.geom, 0.001)), 5)
 ...
 LEFT JOIN LATERAL (
-    SELECT ... FROM stations s JOIN latest_readings r ON ... AND r.pollutant = 'pm10'
+    SELECT ... FROM stations s JOIN latest_readings r ON ... AND r.pollutant = $3
     ORDER BY s.geom::geography <-> ST_PointOnSurface(m.geom)::geography
     LIMIT 1
 ) nearest ON true
@@ -143,8 +144,15 @@ LEFT JOIN LATERAL (
   `ST_SimplifyPreserveTopology` never produces invalid or self-intersecting polygons.
 - **Nearest station instead of average.** Only ~20 of the 212 municipalities contain a
   station, so "average of stations inside" would leave most of the map blank. Each
-  municipality instead gets the value of the nearest station with a PM10 reading from the
-  last 6 hours. The panel shows which station that is and how far away.
+  municipality instead gets the value of the nearest station with a reading of the chosen
+  pollutant from the last 6 hours. The tooltip shows which station that is and how far
+  away. This matters most for O₃ and NO₂, which only 11 stations measure.
+- **Why a pollutant selector.** No single pollutant tells the whole story:
+  - PM10 is measured most widely and is Slovenia's classic winter problem (wood heating
+    and temperature inversions).
+  - PM2.5 is the most harmful to health.
+  - O₃ dominates on sunny summer days.
+  - NO₂ tracks traffic.
 - **Point on surface.** `ST_PointOnSurface` is used rather than the centroid because a
   centroid can fall outside a concave polygon.
 
@@ -159,7 +167,7 @@ by the primary-key index.
 | Hourly air-quality measurements and station locations | ARSO – Agencija RS za okolje, XML feed [`ones_zrak_urni_podatki_7dni.xml`](https://www.arso.gov.si/xml/zrak/ones_zrak_urni_podatki_7dni.xml) ([feed overview](https://www.arso.gov.si/zrak/kakovost%20zraka/podatki/kakovost_zraka_xml.html)) | Listed on the national open data portal [podatki.gov.si](https://podatki.gov.si/dataset/podatki-o-kakovosti-zunanjega-zraka-in-padavin-pm10-o3-so2-co-nox-voc-sestava-delcev-kakovost-padavi), whose terms allow reuse with attribution (CC BY 4.0). Source: ARSO. |
 | Municipality boundaries (212 občine) | GURS – Geodetska uprava RS, register of spatial units, public WFS layer `SI.GURS.RPE:OB_G` | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), © GURS |
 | Base map | © OpenStreetMap contributors | ODbL |
-| PM10 colour bands | [EEA European Air Quality Index](https://airindex.eea.europa.eu/AQI/index.html) (revised, hourly) | — |
+| Colour bands (all four pollutants) | [EEA European Air Quality Index](https://airindex.eea.europa.eu/AQI/index.html) (revised, hourly) | — |
 
 ARSO marks its real-time data as **unverified and for information only**. The ARSO
 dataset entry on the portal has no license field filled in, so the attribution above
@@ -237,8 +245,8 @@ The full-resolution boundaries are in the database. Only the API simplifies them
   for example to the national 6,000 settlements or a long history.
 - **Interpolated surface:** an IDW or kriging surface instead of the nearest-station
   approximation, with its uncertainty shown honestly.
-- **Overall AQI:** use the worst sub-index across all pollutants, as the EEA does,
-  instead of PM10 only.
+- **Overall AQI:** add an "overall" option that uses the worst sub-index across all
+  pollutants at each station, as the EEA does.
 - **DST edge case:** during the autumn clock change, ARSO's local timestamps for the
   repeated hour are ambiguous. Handling this needs the hour from `datum_od` or UTC
   times from the source.
