@@ -44,7 +44,16 @@ function render() {
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       scales: {
-        x: { ticks: { maxTicksLimit: 4, maxRotation: 0 } },
+        x: {
+          ticks: {
+            maxRotation: 0,
+            autoSkipPadding: 24,
+            // Axis shows only the day ("2 Nov"); the tooltip shows the full time.
+            callback(value) {
+              return this.getLabelForValue(value).split(',')[0];
+            },
+          },
+        },
         y: { beginAtZero: true, title: { display: true, text: 'µg/m³' } },
       },
       plugins: {
